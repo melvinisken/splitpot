@@ -2,20 +2,57 @@
 
 Web-App zum Verwalten gemeinsamer Ausgaben (z. B. Wochenendtrip, WG, Reise):
 Ausgaben erfassen, Salden pro Person berechnen und optimale Ausgleichszahlungen
-vorschlagen. Die Daten werden **serverseitig** in einer Datei gespeichert
-(`data/splitpot.json`); zusätzlich bleibt eine lokale Kopie im Browser
-(localStorage) als Offline-Fallback.
+vorschlagen. Die Daten werden **serverseitig** gespeichert; zusätzlich bleibt
+eine lokale Kopie im Browser (localStorage) als Offline-Fallback.
 
-## Starten
+Die App läuft ohne Build-Schritt und ohne CDN – React liegt lokal bei
+(`public/vendor/`). Es gibt zwei Betriebsvarianten:
 
-Voraussetzung: [Node.js](https://nodejs.org) (Version 18 oder höher).
-Keine weiteren Abhängigkeiten – der Server nutzt nur Node-Standardmodule.
+| Variante | Voraussetzung | Speicherung |
+| -------- | ------------- | ----------- |
+| **PHP-Webspace** | PHP 7.0+ (Standard-Shared-Hosting) | `data/splitpot.json` via `api.php` |
+| **Node.js** | Node 18+ | `data/splitpot.json` via `server.js` |
 
-```bash
-node server.js
+Der Client erkennt automatisch, welches Backend vorhanden ist: er fragt
+zunächst `/api/data` (Node-Server) an und wechselt bei Nichtverfügbarkeit auf
+`api.php` (PHP-Webspace). Ohne Backend läuft die App im Offline-Modus und
+speichert nur im Browser.
+
+## Betrieb auf PHP-Webspace (Shared Hosting)
+
+1. Alle Dateien aus `public/` **und** `api.php` per FTP in das
+   Webverzeichnis hochladen (z. B. `htdocs/` bzw. `public_html/`) – die
+   Verzeichnisstruktur dabei beachten:
+
+   ```
+   htdocs/
+     api.php
+     index.html
+     app.js
+     styles.css
+     vendor/react*.js
+   ```
+
+2. Fertig. Beim ersten Speichern legt `api.php` den Ordner `data/` mit der
+   Datendatei an und schützt ihn per `.htaccess` gegen direkten Webzugriff
+   (Apache). Falls der Ordner nicht angelegt werden kann, `data/` manuell
+   per FTP anlegen und mit Schreibrechten versehen (meist 0770 oder 0775).
+
+3. Aufruf: `https://deine-domain.de/` – die API läuft dann unter
+   `https://deine-domain.de/api.php`.
+
+**Sicherheitshinweis:** Bei nginx (statt Apache) bitte zusätzlich den
+Zugriff auf `/data/` in der Serverkonfiguration sperren:
+
+```nginx
+location ^~ /data/ { deny all; return 404; }
 ```
 
-Die App läuft danach unter <http://127.0.0.1:3000>.
+## Betrieb mit Node.js
+
+```bash
+node server.js     # läuft auf http://127.0.0.1:3000
+```
 
 Konfiguration über Umgebungsvariablen:
 
@@ -27,6 +64,7 @@ Konfiguration über Umgebungsvariablen:
 ## Struktur
 
 ```
+api.php                   PHP-Backend: GET/PUT, Validierung, atomares Schreiben (flock)
 server.js                 Node-Server: statische Dateien + REST-API, Datei-Persistenz
 public/
   index.html              Einstiegseite (inkl. Content-Security-Policy)
@@ -38,10 +76,14 @@ data/splitpot.json        Gespeicherte Daten (wird beim ersten Speichern angeleg
 
 ## API
 
-| Methode | Pfad       | Beschreibung                                      |
-| ------- | ---------- | ------------------------------------------------- |
-| `GET`   | `/api/data` | Liefert `{ data: … }` bzw. `{ data: null }`       |
-| `PUT`   | `/api/data` | Speichert den Datenstand (validiert, atomar, max. 1 MB) |
+| Methode | Pfad (Node)  | Pfad (PHP)  | Beschreibung                                      |
+| ------- | ------------ | ----------- | ------------------------------------------------- |
+| `GET`   | `/api/data`  | `/api.php`  | Liefert `{ data: … }` bzw. `{ data: null }`       |
+| `PUT`   | `/api/data`  | `/api.php`  | Speichert den Datenstand (validiert, atomar, max. 1 MB) |
+
+Beide Backends validieren dasselbe Datenmodell und schreiben atomar
+(Temp-Datei + Umbenennen; PHP zusätzlich mit Sperrdatei gegen
+gleichzeitige Schreibzugriffe).
 
 ## Datenmodell
 
@@ -63,11 +105,10 @@ der Ausgaben (Excel-kompatibel, mit Schutz vor Formel-Injektion).
 
 ## Hinweise für den Betrieb
 
-- Der Server bindet standardmäßig nur `127.0.0.1`. Für einen öffentlichen
-  Betrieb hinter einem Reverse-Proxy (nginx, Caddy, …) `HOST=0.0.0.0` setzen
-  und TLS sowie Zugriffsschutz (z. B. Basic Auth im Proxy) konfigurieren.
 - Die Datendatei liegt im Git-Ignore; Backups lassen sich über den in der App
   eingebauten JSON-Export erstellen.
 - Es gibt keine Benutzerverwaltung: Alle Besucher teilen sich denselben
   Datenstand. Für mehrere Anlässe/Gruppen müsste eine Authentifizierung bzw.
   Multi-Tenant-Logik ergänzt werden.
+- Bei gleichzeitigem Bearbeiten von zwei Geräten gilt „zuletzt gespeichert
+  gewinnt“.

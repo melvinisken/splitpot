@@ -6,8 +6,22 @@
   var useRef = React.useRef;
 
   var KEY = "split-pot-expenses-v1";
-  var API = "/api/data";
+  var apiEndpoint = "/api/data";
   var SAVE_DEBOUNCE_MS = 500;
+
+  function fetchApiGet() {
+    return fetch(apiEndpoint).then(function (r) {
+      if ((r.status === 404 || r.status === 405) && apiEndpoint !== "/api.php") {
+        apiEndpoint = "/api.php";
+        return fetch(apiEndpoint).then(function (r2) {
+          if (!r2.ok) throw new Error("HTTP " + r2.status);
+          return r2.json();
+        });
+      }
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+  }
 
   var seed = {
     title: "Wochenende an der Küste",
@@ -126,10 +140,7 @@
 
     useEffect(function () {
       var cancelled = false;
-      fetch(API).then(function (r) {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.json();
-      }).then(function (res) {
+      fetchApiGet().then(function (res) {
         if (cancelled) return;
         loadedRef.current = true;
         if (res && validData(res.data)) {
@@ -154,7 +165,7 @@
       setSaveState("saving");
       clearTimeout(timerRef.current);
       timerRef.current = setTimeout(function () {
-        fetch(API, {
+        fetch(apiEndpoint, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data)
