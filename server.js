@@ -22,7 +22,7 @@ const MIME = {
   ".ico": "image/x-icon"
 };
 
-function validData(d) {
+function validEvent(d) {
   return !!(d && typeof d === "object" &&
     typeof d.title === "string" &&
     Array.isArray(d.members) &&
@@ -43,11 +43,24 @@ function validData(d) {
           Number.isFinite(Number(p.amount))))));
 }
 
+function validStore(d) {
+  if (!d || typeof d !== "object") return false;
+  if (Array.isArray(d.events)) {
+    if (d.events.length === 0) return false;
+    if (!d.events.every((e) => validEvent(e) &&
+        (typeof e.id === "string" || typeof e.id === "number"))) return false;
+    const ids = d.events.map((e) => String(e.id));
+    if (d.activeEventId !== undefined && !ids.includes(String(d.activeEventId))) return false;
+    return true;
+  }
+  return validEvent(d);
+}
+
 async function readData() {
   try {
     const raw = await fsp.readFile(DATA_FILE, "utf8");
     const parsed = JSON.parse(raw);
-    return validData(parsed) ? parsed : null;
+    return validStore(parsed) ? parsed : null;
   } catch (err) {
     if (err.code !== "ENOENT") console.error("Fehler beim Lesen der Datendatei:", err.message);
     return null;
@@ -100,7 +113,7 @@ async function handleApi(req, res) {
     } catch (err) {
       return sendJson(res, 400, { error: "Ungültiges JSON" });
     }
-    if (!validData(parsed)) {
+    if (!validStore(parsed)) {
       return sendJson(res, 422, { error: "Daten entsprechen nicht dem erwarteten Format" });
     }
     try {

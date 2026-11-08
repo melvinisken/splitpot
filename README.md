@@ -85,20 +85,33 @@ Beide Backends validieren dasselbe Datenmodell und schreiben atomar
 (Temp-Datei + Umbenennen; PHP zusätzlich mit Sperrdatei gegen
 gleichzeitige Schreibzugriffe).
 
-## Datenmodell
+## Datenmodell (Version 2, mehrere Anlässe)
 
 ```json
 {
-  "title": "Wochenende an der Küste",
-  "currency": "EUR",
-  "members": ["Alex", "Sam"],
-  "expenses": [
-    { "id": 1, "title": "Abendessen", "amount": 92, "payer": "Mia",
-      "participants": ["Alex", "Mia"], "comment": "", "date": "2026-06-15" }
-  ],
-  "payments": [ { "id": 4, "from": "Alex", "to": "Mia", "amount": 46 } ]
+  "version": 2,
+  "activeEventId": 1,
+  "events": [
+    {
+      "id": 1,
+      "title": "Wochenende an der Küste",
+      "currency": "EUR",
+      "members": ["Alex", "Sam"],
+      "expenses": [
+        { "id": 1, "title": "Abendessen", "amount": 92, "payer": "Mia",
+          "participants": ["Alex", "Mia"], "comment": "", "date": "2026-06-15" }
+      ],
+      "payments": [ { "id": 4, "from": "Alex", "to": "Mia", "amount": 46 } ]
+    }
+  ]
 }
 ```
+
+In der App lassen sich beliebig viele Anlässe anlegen („＋ Neu“ neben der
+Anlass-Auswahl), zwischen ihnen wechseln und sie samt aller Ausgaben löschen
+(damit lassen sich auch die Demo-Daten vollständig entfernen). Ältere
+Ein-Anlass-Exporte (Version 1) werden beim Laden automatisch migriert;
+beide Backends akzeptieren beide Formate.
 
 Import/Export: Über „JSON sichern“ / „JSON laden“ in der App sowie CSV-Export
 der Ausgaben (Excel-kompatibel, mit Schutz vor Formel-Injektion).

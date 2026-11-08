@@ -15,7 +15,7 @@ function splitpot_send_json(int $status, array $payload): void
     exit;
 }
 
-function splitpot_valid_data($d): bool
+function splitpot_valid_event($d): bool
 {
     if (!is_array($d)) {
         return false;
@@ -78,6 +78,35 @@ function splitpot_valid_data($d): bool
     return true;
 }
 
+function splitpot_valid_store($d): bool
+{
+    if (!is_array($d)) {
+        return false;
+    }
+    if (array_key_exists('events', $d) && is_array($d['events'])) {
+        if (count($d['events']) === 0) {
+            return false;
+        }
+        $ids = array();
+        foreach ($d['events'] as $e) {
+            if (!splitpot_valid_event($e)) {
+                return false;
+            }
+            if (!isset($e['id']) || (!is_string($e['id']) && !is_int($e['id']))) {
+                return false;
+            }
+            $ids[] = (string) $e['id'];
+        }
+        if (array_key_exists('activeEventId', $d)) {
+            if (!in_array((string) $d['activeEventId'], $ids, true)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return splitpot_valid_event($d);
+}
+
 function splitpot_read_data()
 {
     if (!is_file(SPLITPOT_DATA_FILE)) {
@@ -88,7 +117,7 @@ function splitpot_read_data()
         return null;
     }
     $parsed = json_decode($raw, true);
-    return splitpot_valid_data($parsed) ? $parsed : null;
+    return splitpot_valid_store($parsed) ? $parsed : null;
 }
 
 function splitpot_write_data(array $data): void
@@ -145,7 +174,7 @@ if ($method === 'PUT') {
     if ($parsed === null && json_last_error() !== JSON_ERROR_NONE) {
         splitpot_send_json(400, array('error' => 'Ungueltiges JSON'));
     }
-    if (!splitpot_valid_data($parsed)) {
+    if (!splitpot_valid_store($parsed)) {
         splitpot_send_json(422, array('error' => 'Daten entsprechen nicht dem erwarteten Format'));
     }
     try {
