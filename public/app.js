@@ -5,30 +5,33 @@
   var useEffect = React.useEffect;
   var useRef = React.useRef;
 
-  var KEY = "split-pot-expenses-v1";
   var apiEndpoint = null;
-  var API_CANDIDATES = ["/api/data", "/api.php"];
+  var API_CANDIDATES = ["/api/data", "/api.php", "api/data", "api.php"];
   var SAVE_DEBOUNCE_MS = 500;
 
   function detectApiEndpoint() {
     var index = 0;
+    var problems = [];
     function tryNext() {
       if (index >= API_CANDIDATES.length) {
-        return Promise.reject(new Error("Kein Endpunkt erreichbar"));
+        return Promise.reject(new Error("kein Endpunkt erreichbar: " + problems.join("; ")));
       }
       var candidate = API_CANDIDATES[index++];
       return fetch(candidate).then(function (r) {
         if (!r.ok) throw new Error("HTTP " + r.status);
         var type = r.headers.get("Content-Type") || "";
-        if (type.indexOf("json") === -1) throw new Error("Kein JSON");
+        if (type.indexOf("json") === -1) throw new Error("kein JSON (" + type + ")");
         return r.json().then(function (j) {
           if (!j || typeof j !== "object" || !("data" in j)) {
-            throw new Error("Unerwartete Antwort");
+            throw new Error("unerwartete Antwort");
           }
           apiEndpoint = candidate;
           return j;
         });
-      }).catch(tryNext);
+      }).catch(function (err) {
+        problems.push(candidate + ": " + (err && err.message ? err.message : "Fehler"));
+        return tryNext();
+      });
     }
     return tryNext();
   }
@@ -145,19 +148,6 @@
     return null;
   }
 
-  function readCache() {
-    try {
-      var raw = localStorage.getItem(KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function loadFromCacheOrSeed() {
-    return toStore(readCache()) || seed;
-  }
-
   function fmt(n, c) {
     return new Intl.NumberFormat("de-DE", { style: "currency", currency: c || "EUR" }).format(n);
   }
@@ -226,11 +216,9 @@
     switch (state) {
       case "saving": return "Speichert…";
       case "saved": return "Gespeichert";
-      case "error": return "Server nicht erreichbar – nur lokal gespeichert";
-      case "offline": return "Offline – nur lokal gespeichert";
       default:
         if (state.slice(0, 6) === "error:") {
-          return "Server nicht erreichbar (" + state.slice(6).trim() + ") – nur lokal gespeichert";
+          return "Nicht auf dem Server gespeichert (" + state.slice(6).trim() + ")";
         }
         return "";
     }
@@ -258,19 +246,16 @@
         if (cancelled) return;
         loadedRef.current = true;
         var store = toStore(res && res.data);
-        setData(store || loadFromCacheOrSeed());
-      }).catch(function () {
+        setData(store || seed);
+      }).catch(function (err) {
         if (cancelled) return;
-        loadedRef.current = true;
-        setData(loadFromCacheOrSeed());
-        setSaveState("offline");
+        setSaveState("error: " + (err && err.message ? err.message : "Server nicht erreichbar"));
       });
       return function () { cancelled = true; };
     }, []);
 
     useEffect(function () {
       if (!loadedRef.current || !data) return;
-      try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* Speicher voll/gesperrt */ }
       setSaveState("saving");
       clearTimeout(timerRef.current);
       timerRef.current = setTimeout(function () {
@@ -455,7 +440,7 @@
           var parsed = JSON.parse(reader.result);
           var store = toStore(parsed);
           if (!store) throw new Error("Ungültiges Format");
-          if (!confirm("Import ersetzt alle Anlässe auf dem Server und in diesem Browser. Fortfahren?")) return;
+          if (!confirm("Import ersetzt alle Anlässe auf dem Server. Fortfahren?")) return;
           setData(store);
           flash("JSON-Daten importiert.");
         } catch (err) {
@@ -468,8 +453,15 @@
     }
 
     if (!data || !ev) {
+      var failed = saveState.slice(0, 6) === "error:";
       return React.createElement("main", { className: "wrap" },
-        React.createElement("div", { className: "empty", style: { padding: "60px 0" } }, "Lade…"));
+        React.createElement("div", { className: "empty", style: { padding: "60px 0" } },
+          failed
+            ? React.createElement("div", null,
+                React.createElement("div", null, "Server nicht erreichbar (" + saveState.slice(6).trim() + "). ",
+                  "Daten werden ausschlie\u00dflich auf dem Server gespeichert \u2013 bitte pr\u00fcfen, ob api.php (PHP-Hosting) bzw. server.js (Node) erreichbar ist."),
+                React.createElement("button", { className: "btn", style: { marginTop: 16 }, onClick: function () { location.reload(); } }, "Erneut versuchen"))
+            : "Lade…"));
     }
 
     var h = React.createElement;
@@ -479,7 +471,7 @@
         h("div", { className: "logo" }, "↗"),
         h("div", { className: "brand" }, "Split Pot"),
         h("div", { className: "tagline" }, "Ausgaben fair teilen"),
-        h("div", { className: "save-state " + (saveState === "saving" ? "saving" : saveState === "error" || saveState === "offline" ? "error" : ""), style: { marginLeft: "auto" } }, saveStateLabel(saveState))),
+        h("div", { className: "save-state " + (saveState === "saving" ? "saving" : saveState.slice(0, 6) === "error:" ? "error" : ""), style: { marginLeft: "auto" } }, saveStateLabel(saveState))),
       h("main", { className: "wrap" },
         h("div", { className: "head" },
           h("div", null,
