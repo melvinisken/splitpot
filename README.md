@@ -25,9 +25,10 @@ Ohne erreichbares Backend lädt die App keine Daten und speichert nichts
 
 ## Betrieb auf PHP-Webspace (Shared Hosting)
 
-1. Alle Dateien aus `public/` **und** `api.php` per FTP in das
-   Webverzeichnis hochladen (z. B. `htdocs/` bzw. `public_html/`) – die
-   Verzeichnisstruktur dabei beachten:
+1. Den **kompletten Inhalt von `public/`** per FTP in das
+   Webverzeichnis hochladen (z. B. `htdocs/` bzw. `public_html/`) –
+   `api.php` liegt ebenfalls in `public/`. Die Verzeichnisstruktur dabei
+   beachten:
 
    ```
    htdocs/
@@ -42,6 +43,7 @@ Ohne erreichbares Backend lädt die App keine Daten und speichert nichts
    Datendatei an und schützt ihn per `.htaccess` gegen direkten Webzugriff
    (Apache). Falls der Ordner nicht angelegt werden kann, `data/` manuell
    per FTP anlegen und mit Schreibrechten versehen (meist 0770 oder 0775).
+   Das `data/`-Verzeichnis liegt dann innerhalb des Webverzeichnisses.
 
 3. Aufruf: `https://deine-domain.de/` – die API läuft dann unter
    `https://deine-domain.de/api.php`.
@@ -69,7 +71,7 @@ Konfiguration über Umgebungsvariablen:
 ## Struktur
 
 ```
-api.php                   PHP-Backend: GET/PUT, Validierung, atomares Schreiben (flock)
+public/api.php            PHP-Backend: GET/PUT, Validierung, atomares Schreiben (flock)
 server.js                 Node-Server: statische Dateien + REST-API, Datei-Persistenz
 public/
   index.html              Einstiegseite (inkl. Content-Security-Policy)
