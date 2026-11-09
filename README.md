@@ -2,8 +2,8 @@
 
 Web-App zum Verwalten gemeinsamer Ausgaben (z. B. Wochenendtrip, WG, Reise):
 Ausgaben erfassen, Salden pro Person berechnen und optimale Ausgleichszahlungen
-vorschlagen. Die Daten werden **serverseitig** gespeichert; zusätzlich bleibt
-eine lokale Kopie im Browser (localStorage) als Offline-Fallback.
+vorschlagen. Die Daten werden **ausschließlich serverseitig** gespeichert
+(`data/splitpot.json`); es gibt keine lokale Speicherung im Browser.
 
 Die App läuft ohne Build-Schritt und ohne CDN – React liegt lokal bei
 (`public/vendor/`). Es gibt zwei Betriebsvarianten:
@@ -14,12 +14,14 @@ Die App läuft ohne Build-Schritt und ohne CDN – React liegt lokal bei
 | **Node.js** | Node 18+ | `data/splitpot.json` via `server.js` |
 
 Der Client erkennt automatisch, welches Backend vorhanden ist: er prüft
-`/api/data` (Node-Server) und `api.php` (PHP-Webspace) und nutzt den ersten
-Endpunkt, der gültiges JSON liefert – auch wenn ein Host für unbekannte
-Pfade HTML-Fehlerseiten mit Status 200 zurückgibt. Blockiert der Host die
-`PUT`-Methode (Status 405), weicht der Client automatisch auf `POST` mit dem
-Header `X-HTTP-Method-Override: PUT` aus, das `api.php` ebenfalls akzeptiert.
-Ohne Backend läuft die App im Offline-Modus und speichert nur im Browser.
+`/api/data` (Node-Server) und `api.php` (PHP-Webspace) – jeweils absolut und
+relativ, damit auch Installationen in einem Unterverzeichnis funktionieren –
+und nutzt den ersten Endpunkt, der gültiges JSON liefert; HTML-Fehlerseiten
+mit Status 200 werden übersprungen. Blockiert der Host die `PUT`-Methode
+(Status 405), weicht der Client automatisch auf `POST` mit dem Header
+`X-HTTP-Method-Override: PUT` aus, das `api.php` ebenfalls akzeptiert.
+Ohne erreichbares Backend lädt die App keine Daten und speichert nichts
+(kein lokaler Fallback mehr).
 
 ## Betrieb auf PHP-Webspace (Shared Hosting)
 
