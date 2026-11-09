@@ -81,11 +81,12 @@
   };
 
   function validShares(x) {
-    return x.shares === undefined ||
-      (x.shares && typeof x.shares === "object" && !Array.isArray(x.shares) &&
-        Object.keys(x.shares).every(function (k) {
-          return Number.isInteger(x.shares[k]) && x.shares[k] > 0;
-        }));
+    if (x.shares === undefined) return true;
+    if (Array.isArray(x.shares)) return x.shares.length === 0;
+    return !!x.shares && typeof x.shares === "object" &&
+      Object.keys(x.shares).every(function (k) {
+        return Number.isInteger(x.shares[k]) && x.shares[k] > 0;
+      });
   }
 
   function validEvent(d) {
@@ -363,7 +364,8 @@
         var w = draftShare(p);
         if (w > 1) shares[p] = w;
       });
-      var clean = { ...draft, title: draft.title.trim(), amount: Math.round(a * 100) / 100, shares: shares };
+      var clean = { ...draft, title: draft.title.trim(), amount: Math.round(a * 100) / 100 };
+      if (Object.keys(shares).length) clean.shares = shares;
       updateEvent(function (x) {
         return {
           ...x,

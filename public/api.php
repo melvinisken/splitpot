@@ -23,6 +23,9 @@ function splitpot_valid_shares($x): bool
     if (!is_array($x['shares'])) {
         return false;
     }
+    if ($x['shares'] === array()) {
+        return true;
+    }
     foreach ($x['shares'] as $v) {
         if (!is_int($v) || $v < 1) {
             return false;
@@ -139,6 +142,31 @@ function splitpot_read_data()
     return splitpot_valid_store($parsed) ? $parsed : null;
 }
 
+function splitpot_empty_shares_to_object(array $data): array
+{
+    if (isset($data['events']) && is_array($data['events'])) {
+        foreach ($data['events'] as $eventKey => $event) {
+            if (!isset($event['expenses']) || !is_array($event['expenses'])) {
+                continue;
+            }
+            foreach ($event['expenses'] as $expenseKey => $expense) {
+                if (isset($expense['shares']) && $expense['shares'] === array()) {
+                    $data['events'][$eventKey]['expenses'][$expenseKey]['shares'] = new stdClass();
+                }
+            }
+        }
+        return $data;
+    }
+    if (isset($data['expenses']) && is_array($data['expenses'])) {
+        foreach ($data['expenses'] as $expenseKey => $expense) {
+            if (isset($expense['shares']) && $expense['shares'] === array()) {
+                $data['expenses'][$expenseKey]['shares'] = new stdClass();
+            }
+        }
+    }
+    return $data;
+}
+
 function splitpot_write_data(array $data): void
 {
     if (!is_dir(SPLITPOT_DATA_DIR)) {
@@ -160,7 +188,7 @@ function splitpot_write_data(array $data): void
         throw new RuntimeException('Sperre nicht erhaltbar');
     }
     try {
-        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $json = json_encode(splitpot_empty_shares_to_object($data), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if ($json === false) {
             throw new RuntimeException('JSON-Encoding fehlgeschlagen');
         }
