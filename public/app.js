@@ -35,12 +35,21 @@
         expenses: [
           { id: 1, title: "Ferienwohnung", amount: 360, payer: "Alex", participants: ["Alex", "Sam", "Mia", "Jonas"], comment: "Anzahlung für beide Nächte", date: "2026-06-14" },
           { id: 2, title: "Einkauf & Frühstück", amount: 48.6, payer: "Sam", participants: ["Alex", "Sam", "Mia", "Jonas"], comment: "Supermarkt am Samstag", date: "2026-06-15" },
-          { id: 3, title: "Abendessen", amount: 92, payer: "Mia", participants: ["Alex", "Mia", "Jonas"], comment: "Sam war schon abgereist", date: "2026-06-15" }
+          { id: 3, title: "Abendessen", amount: 92, payer: "Mia", participants: ["Alex", "Mia", "Jonas"], comment: "Sam war schon abgereist", date: "2026-06-15" },
+          { id: 4, title: "Hotelzimmer", amount: 360, payer: "Alex", participants: ["Sam", "Mia", "Jonas"], shares: { Sam: 2, Mia: 2, Jonas: 2 }, comment: "6 Zimmer – Alex vorab erstattet", date: "2026-06-14" }
         ],
         payments: []
       }
     ]
   };
+
+  function validShares(x) {
+    return x.shares === undefined ||
+      (x.shares && typeof x.shares === "object" && !Array.isArray(x.shares) &&
+        Object.keys(x.shares).every(function (k) {
+          return Number.isInteger(x.shares[k]) && x.shares[k] > 0;
+        }));
+  }
 
   function validEvent(d) {
     return !!(d && typeof d === "object" &&
@@ -55,7 +64,8 @@
           typeof x.payer === "string" &&
           Array.isArray(x.participants) &&
           x.participants.length > 0 &&
-          x.participants.every(function (p) { return typeof p === "string"; });
+          x.participants.every(function (p) { return typeof p === "string"; }) &&
+        validShares(x);
       }) &&
       (d.payments === undefined ||
         (Array.isArray(d.payments) &&
@@ -124,15 +134,30 @@
     return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" }).format(d);
   }
 
+  function shareOf(e, p) {
+    if (!(e.participants || []).includes(p)) return 0;
+    var w = e.shares ? Number(e.shares[p]) : 0;
+    return Number.isInteger(w) && w > 0 ? w : 1;
+  }
+
+  function totalShares(e) {
+    return (e.participants || []).reduce(function (s, p) { return s + shareOf(e, p); }, 0);
+  }
+
   function balances(ev) {
     var b = Object.fromEntries(ev.members.map(function (m) { return [m, 0]; }));
     for (var i = 0; i < ev.expenses.length; i++) {
       var e = ev.expenses[i];
       var cents = Math.round(e.amount * 100), ps = e.participants || [];
       if (!ps.length) continue;
-      var base = Math.floor(cents / ps.length), rem = cents - base * ps.length;
+      var wsum = totalShares(e);
+      if (!wsum) continue;
+      var given = 0;
       ps.forEach(function (p, idx) {
-        b[p] = (b[p] || 0) - (base + (idx < rem ? 1 : 0)) / 100;
+        var w = shareOf(e, p);
+        var part = idx === ps.length - 1 ? cents - given : Math.floor(cents * w / wsum);
+        given += part;
+        b[p] = (b[p] || 0) - part / 100;
       });
       b[e.payer] = (b[e.payer] || 0) + cents / 100;
     }
@@ -282,13 +307,31 @@
 
     function openExpense(e) {
       setDraft(e
-        ? { ...e, participants: [...e.participants] }
+        ? { ...e, participants: [...e.participants], shares: { ...(e.shares || {}) } }
         : {
             id: Date.now(), title: "", amount: "", payer: ev.members[0] || "",
-            participants: [...ev.members], comment: "",
+            participants: [...ev.members], shares: {}, comment: "",
             date: new Date().toISOString().slice(0, 10)
           });
       setModal("expense");
+    }
+
+    function draftShare(m) {
+      if (!draft.participants.includes(m)) return 0;
+      var w = draft.shares ? Number(draft.shares[m]) : 0;
+      return Number.isInteger(w) && w > 0 ? w : 1;
+    }
+
+    function setDraftShare(m, next) {
+      next = Math.max(0, Math.min(99, next));
+      var shares = {};
+      ev.members.forEach(function (x) {
+        var v = x === m ? next : draftShare(x);
+        if (v > 1) shares[x] = v;
+      });
+      var participants = draft.participants.filter(function (x) { return x === m ? next > 0 : true; });
+      if (next > 0 && !participants.includes(m)) participants = [...participants, m];
+      setDraft({ ...draft, participants: participants, shares: shares });
     }
 
     function saveExpense() {
@@ -297,7 +340,12 @@
         flash("Bitte Titel, gültigen Betrag, zahlende Person und mindestens eine teilnehmende Person angeben.");
         return;
       }
-      var clean = { ...draft, title: draft.title.trim(), amount: Math.round(a * 100) / 100 };
+      var shares = {};
+      draft.participants.forEach(function (p) {
+        var w = draftShare(p);
+        if (w > 1) shares[p] = w;
+      });
+      var clean = { ...draft, title: draft.title.trim(), amount: Math.round(a * 100) / 100, shares: shares };
       updateEvent(function (x) {
         return {
           ...x,
@@ -342,9 +390,11 @@
     }
 
     function exportCSV() {
-      var rows = [["Datum", "Ausgabe", "Betrag", "Bezahlt von", "Dabei", "Kommentar"]]
+      var rows = [["Datum", "Ausgabe", "Betrag", "Bezahlt von", "Dabei", "Anteile", "Kommentar"]]
         .concat(ev.expenses.map(function (e) {
-          return [e.date, e.title, e.amount, e.payer, e.participants.join(", "), e.comment];
+          return [e.date, e.title, e.amount, e.payer, e.participants.join(", "),
+            (e.participants || []).map(function (p) { return p + " (" + shareOf(e, p) + ")"; }).join(", "),
+            e.comment];
         }));
       var csv = "\uFEFF" + rows.map(function (r) { return r.map(esc).join(";"); }).join("\r\n");
       var a = document.createElement("a");
@@ -430,11 +480,11 @@
                       h("div", { className: "ename" }, e.title),
                       h("div", { className: "detail" }, dateFmt(e.date), " · bezahlt von ", e.payer, e.comment ? " · " + e.comment : ""),
                       h("div", { className: "chips" }, (e.participants || []).map(function (p) {
-                        return h("span", { className: "chip", key: p }, p);
+                        return h("span", { className: "chip", key: p }, p, shareOf(e, p) > 1 ? " ×" + shareOf(e, p) : "");
                       }))),
                     h("div", null,
                       h("div", { className: "money" }, fmt(e.amount, ev.currency)),
-                      h("div", { className: "muted" }, (e.participants || []).length ? fmt(e.amount / e.participants.length, ev.currency) + " p. P." : "–"),
+                      h("div", { className: "muted" }, (e.participants || []).length ? fmt(e.amount / totalShares(e), ev.currency) + " je Anteil" : "–"),
                       h("button", { className: "btn small", style: { marginTop: 7 }, onClick: function () { openExpense(e); } }, "Bearbeiten")));
                 })),
           h("aside", { className: "sidebar" },
@@ -459,7 +509,7 @@
                         h("button", { className: "btn small", onClick: function () { markPaid(t); } }, "Bezahlt")));
                   })
                 : h("div", { className: "empty", style: { padding: "17px 4px" } }, "Alles ausgeglichen."),
-              h("div", { className: "tip" }, "Salden basieren auf den Zahlenden und den ausgewählten Teilnehmenden. Ausgleiche kannst du als bezahlt verbuchen.")),
+              h("div", { className: "tip" }, "Salden basieren auf den Zahlenden sowie den Teilnehmenden und ihren Anteilen. Ausgleiche kannst du als bezahlt verbuchen.")),
             h("section", { className: "panel", style: { padding: 18 } },
               h("div", { className: "panel-title", style: { marginBottom: 12 } }, "Personen"),
               h("div", { className: "name-list" }, ev.members.map(function (m) {
@@ -489,16 +539,24 @@
                 h("label", null, "Datum"),
                 h("input", { type: "date", value: draft.date, onChange: function (e) { setDraft({ ...draft, date: e.target.value }); } }))),
             h("div", { className: "field" },
-              h("label", null, "Wer war dabei? · anklicken"),
-              h("div", { className: "people" }, ev.members.map(function (m) {
-                return h("button", { type: "button", key: m, className: "person " + (draft.participants.includes(m) ? "on" : ""), onClick: function () {
-                  setDraft({ ...draft, participants: draft.participants.includes(m) ? draft.participants.filter(function (x) { return x !== m; }) : [...draft.participants, m] });
-                } }, draft.participants.includes(m) ? "✓ " : "", m);
+              h("label", null, "Wer ist dabei? · Anteile einstellen"),
+              h("div", { className: "share-list" }, ev.members.map(function (m) {
+                var w = draftShare(m);
+                var a = Number(String(draft.amount).replace(",", "."));
+                var wsum = draft.participants.reduce(function (s, p) { return s + draftShare(p); }, 0);
+                var per = Number.isFinite(a) && a > 0 && wsum > 0 && w > 0 ? fmt(a * w / wsum, ev.currency) : null;
+                return h("div", { className: "share-row " + (w > 0 ? "on" : ""), key: m },
+                  h("span", { className: "share-name" }, w > 0 ? "✓ " : "", m),
+                  h("span", { className: "share-amount" }, per || ""),
+                  h("span", { className: "stepper" },
+                    h("button", { type: "button", className: "step", onClick: function () { setDraftShare(m, w - 1); }, disabled: w === 0 }, "−"),
+                    h("span", { className: "share-count" }, w),
+                    h("button", { type: "button", className: "step", onClick: function () { setDraftShare(m, w + 1); } }, "+")));
               }))),
             h("div", { className: "field" },
               h("label", null, "Kommentar (optional)"),
               h("input", { placeholder: "Weitere Details zur Ausgabe", value: draft.comment, onChange: function (e) { setDraft({ ...draft, comment: e.target.value }); } })),
-            h("div", { className: "notice" }, "Gleichmäßige Aufteilung auf die ausgewählten Personen."),
+            h("div", { className: "notice" }, "Anteile bestimmen die Aufteilung: 0 Anteile = nicht dabei. Wer z. B. zwei von sechs Hotelzimmern übernimmt, erhält 2 Anteile. Auch die zahlende Person kann 0 Anteile haben und wird dann voll erstattet."),
             h("div", { className: "modal-foot" },
               h("div", null, ev.expenses.some(function (e) { return e.id === draft.id; }) &&
                 h("button", { className: "btn", onClick: function () { removeExpense(draft.id); } }, "Löschen")),

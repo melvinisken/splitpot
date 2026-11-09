@@ -15,6 +15,22 @@ function splitpot_send_json(int $status, array $payload): void
     exit;
 }
 
+function splitpot_valid_shares($x): bool
+{
+    if (!array_key_exists('shares', $x)) {
+        return true;
+    }
+    if (!is_array($x['shares'])) {
+        return false;
+    }
+    foreach ($x['shares'] as $v) {
+        if (!is_int($v) || $v < 1) {
+            return false;
+        }
+    }
+    return true;
+}
+
 function splitpot_valid_event($d): bool
 {
     if (!is_array($d)) {
@@ -54,6 +70,9 @@ function splitpot_valid_event($d): bool
             if (!is_string($p)) {
                 return false;
             }
+        }
+        if (!splitpot_valid_shares($x)) {
+            return false;
         }
     }
     if (array_key_exists('payments', $d)) {

@@ -22,6 +22,12 @@ const MIME = {
   ".ico": "image/x-icon"
 };
 
+function validShares(x) {
+  if (x.shares === undefined) return true;
+  if (!x.shares || typeof x.shares !== "object" || Array.isArray(x.shares)) return false;
+  return Object.entries(x.shares).every(([, v]) => Number.isInteger(v) && v > 0);
+}
+
 function validEvent(d) {
   return !!(d && typeof d === "object" &&
     typeof d.title === "string" &&
@@ -34,7 +40,8 @@ function validEvent(d) {
       typeof x.payer === "string" &&
       Array.isArray(x.participants) &&
       x.participants.length > 0 &&
-      x.participants.every((p) => typeof p === "string")) &&
+      x.participants.every((p) => typeof p === "string") &&
+      validShares(x)) &&
     (d.payments === undefined ||
       (Array.isArray(d.payments) &&
         d.payments.every((p) => p && typeof p === "object" &&
