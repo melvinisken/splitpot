@@ -6,20 +6,54 @@
   var useRef = React.useRef;
 
   var KEY = "split-pot-expenses-v1";
-  var apiEndpoint = "/api/data";
+  var apiEndpoint = null;
+  var API_CANDIDATES = ["/api/data", "/api.php"];
   var SAVE_DEBOUNCE_MS = 500;
 
-  function fetchApiGet() {
-    return fetch(apiEndpoint).then(function (r) {
-      if ((r.status === 404 || r.status === 405) && apiEndpoint !== "/api.php") {
-        apiEndpoint = "/api.php";
-        return fetch(apiEndpoint).then(function (r2) {
-          if (!r2.ok) throw new Error("HTTP " + r2.status);
-          return r2.json();
+  function detectApiEndpoint() {
+    var index = 0;
+    function tryNext() {
+      if (index >= API_CANDIDATES.length) {
+        return Promise.reject(new Error("Kein Endpunkt erreichbar"));
+      }
+      var candidate = API_CANDIDATES[index++];
+      return fetch(candidate).then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        var type = r.headers.get("Content-Type") || "";
+        if (type.indexOf("json") === -1) throw new Error("Kein JSON");
+        return r.json().then(function (j) {
+          if (!j || typeof j !== "object" || !("data" in j)) {
+            throw new Error("Unerwartete Antwort");
+          }
+          apiEndpoint = candidate;
+          return j;
+        });
+      }).catch(tryNext);
+    }
+    return tryNext();
+  }
+
+  function putToServer(json) {
+    if (!apiEndpoint) return Promise.reject(new Error("Kein Endpunkt"));
+    return fetch(apiEndpoint, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: json
+    }).then(function (r) {
+      if (r.ok) return r;
+      if (r.status === 405) {
+        return fetch(apiEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-HTTP-Method-Override": "PUT"
+          },
+          body: json
         });
       }
+      throw new Error("HTTP " + r.status);
+    }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.json();
     });
   }
 
@@ -194,7 +228,11 @@
       case "saved": return "Gespeichert";
       case "error": return "Server nicht erreichbar – nur lokal gespeichert";
       case "offline": return "Offline – nur lokal gespeichert";
-      default: return "";
+      default:
+        if (state.slice(0, 6) === "error:") {
+          return "Server nicht erreichbar (" + state.slice(6).trim() + ") – nur lokal gespeichert";
+        }
+        return "";
     }
   }
 
@@ -216,7 +254,7 @@
 
     useEffect(function () {
       var cancelled = false;
-      fetchApiGet().then(function (res) {
+      detectApiEndpoint().then(function (res) {
         if (cancelled) return;
         loadedRef.current = true;
         var store = toStore(res && res.data);
@@ -236,15 +274,10 @@
       setSaveState("saving");
       clearTimeout(timerRef.current);
       timerRef.current = setTimeout(function () {
-        fetch(apiEndpoint, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data)
-        }).then(function (r) {
-          if (!r.ok) throw new Error("HTTP " + r.status);
+        putToServer(JSON.stringify(data)).then(function () {
           setSaveState("saved");
-        }).catch(function () {
-          setSaveState("error");
+        }).catch(function (err) {
+          setSaveState("error: " + (err && err.message ? err.message : "unbekannt"));
         });
       }, SAVE_DEBOUNCE_MS);
     }, [data]);

@@ -179,6 +179,11 @@ function splitpot_write_data(array $data): void
 }
 
 $method = isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : '';
+if ($method === 'POST'
+    && isset($_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'])
+    && strtoupper($_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE']) === 'PUT') {
+    $method = 'PUT';
+}
 
 if ($method === 'GET') {
     splitpot_send_json(200, array('data' => splitpot_read_data()));
