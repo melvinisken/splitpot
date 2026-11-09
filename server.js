@@ -24,7 +24,9 @@ const MIME = {
 
 function validShares(x) {
   if (x.shares === undefined) return true;
-  if (Array.isArray(x.shares)) return x.shares.length === 0;
+  if (Array.isArray(x.shares)) {
+    return x.shares.every((v) => Number.isInteger(v) && v > 0);
+  }
   return !!x.shares && typeof x.shares === "object" &&
     Object.entries(x.shares).every(([, v]) => Number.isInteger(v) && v > 0);
 }

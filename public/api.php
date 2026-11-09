@@ -27,7 +27,8 @@ function splitpot_valid_shares($x): bool
         return true;
     }
     foreach ($x['shares'] as $v) {
-        if (!is_int($v) || $v < 1) {
+        $isIntegral = is_int($v) || (is_float($v) && $v === floor($v));
+        if (!$isIntegral || $v < 1) {
             return false;
         }
     }
@@ -152,6 +153,12 @@ function splitpot_empty_shares_to_object(array $data): array
             foreach ($event['expenses'] as $expenseKey => $expense) {
                 if (isset($expense['shares']) && $expense['shares'] === array()) {
                     $data['events'][$eventKey]['expenses'][$expenseKey]['shares'] = new stdClass();
+                } elseif (isset($expense['shares']) && is_array($expense['shares']) && $expense['shares'] !== array()) {
+                    foreach ($expense['shares'] as $memberKey => $shareValue) {
+                        if (is_float($shareValue) && $shareValue === floor($shareValue)) {
+                            $data['events'][$eventKey]['expenses'][$expenseKey]['shares'][$memberKey] = (int) $shareValue;
+                        }
+                    }
                 }
             }
         }
@@ -161,6 +168,12 @@ function splitpot_empty_shares_to_object(array $data): array
         foreach ($data['expenses'] as $expenseKey => $expense) {
             if (isset($expense['shares']) && $expense['shares'] === array()) {
                 $data['expenses'][$expenseKey]['shares'] = new stdClass();
+            } elseif (isset($expense['shares']) && is_array($expense['shares']) && $expense['shares'] !== array()) {
+                foreach ($expense['shares'] as $memberKey => $shareValue) {
+                    if (is_float($shareValue) && $shareValue === floor($shareValue)) {
+                        $data['expenses'][$expenseKey]['shares'][$memberKey] = (int) $shareValue;
+                    }
+                }
             }
         }
     }

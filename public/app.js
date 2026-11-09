@@ -82,7 +82,9 @@
 
   function validShares(x) {
     if (x.shares === undefined) return true;
-    if (Array.isArray(x.shares)) return x.shares.length === 0;
+    if (Array.isArray(x.shares)) {
+      return x.shares.every(function (v) { return Number.isInteger(v) && v > 0; });
+    }
     return !!x.shares && typeof x.shares === "object" &&
       Object.keys(x.shares).every(function (k) {
         return Number.isInteger(x.shares[k]) && x.shares[k] > 0;
@@ -240,6 +242,30 @@
     var saveState = saveStateSet[0], setSaveState = saveStateSet[1];
     var loadedRef = useRef(false);
     var timerRef = useRef(null);
+    var pendingDataRef = useRef(null);
+
+    useEffect(function () {
+      function flush() {
+        var json = pendingDataRef.current;
+        pendingDataRef.current = null;
+        if (!apiEndpoint || !json) return;
+        fetch(apiEndpoint, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: json,
+          keepalive: true
+        }).catch(function () { /* Seite wird ohnehin verlassen */ });
+      }
+      function onVisibilityChange() {
+        if (document.visibilityState === "hidden") flush();
+      }
+      window.addEventListener("pagehide", flush);
+      document.addEventListener("visibilitychange", onVisibilityChange);
+      return function () {
+        window.removeEventListener("pagehide", flush);
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      };
+    }, []);
 
     useEffect(function () {
       var cancelled = false;
@@ -259,8 +285,11 @@
       if (!loadedRef.current || !data) return;
       setSaveState("saving");
       clearTimeout(timerRef.current);
+      var json = JSON.stringify(data);
+      pendingDataRef.current = json;
       timerRef.current = setTimeout(function () {
-        putToServer(JSON.stringify(data)).then(function () {
+        pendingDataRef.current = null;
+        putToServer(json).then(function () {
           setSaveState("saved");
         }).catch(function (err) {
           setSaveState("error: " + (err && err.message ? err.message : "unbekannt"));
@@ -369,8 +398,8 @@
       updateEvent(function (x) {
         return {
           ...x,
-          expenses: x.expenses.some(function (y) { return y.id === clean.id; })
-            ? x.expenses.map(function (y) { return y.id === clean.id ? clean : y; })
+          expenses: x.expenses.some(function (y) { return String(y.id) === String(clean.id); })
+            ? x.expenses.map(function (y) { return String(y.id) === String(clean.id) ? clean : y; })
             : [clean, ...x.expenses]
         };
       });
