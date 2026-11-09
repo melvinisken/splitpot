@@ -13,10 +13,13 @@ Die App läuft ohne Build-Schritt und ohne CDN – React liegt lokal bei
 | **PHP-Webspace** | PHP 7.0+ (Standard-Shared-Hosting) | `data/splitpot.json` via `api.php` |
 | **Node.js** | Node 18+ | `data/splitpot.json` via `server.js` |
 
-Der Client erkennt automatisch, welches Backend vorhanden ist: er fragt
-zunächst `/api/data` (Node-Server) an und wechselt bei Nichtverfügbarkeit auf
-`api.php` (PHP-Webspace). Ohne Backend läuft die App im Offline-Modus und
-speichert nur im Browser.
+Der Client erkennt automatisch, welches Backend vorhanden ist: er prüft
+`/api/data` (Node-Server) und `api.php` (PHP-Webspace) und nutzt den ersten
+Endpunkt, der gültiges JSON liefert – auch wenn ein Host für unbekannte
+Pfade HTML-Fehlerseiten mit Status 200 zurückgibt. Blockiert der Host die
+`PUT`-Methode (Status 405), weicht der Client automatisch auf `POST` mit dem
+Header `X-HTTP-Method-Override: PUT` aus, das `api.php` ebenfalls akzeptiert.
+Ohne Backend läuft die App im Offline-Modus und speichert nur im Browser.
 
 ## Betrieb auf PHP-Webspace (Shared Hosting)
 
